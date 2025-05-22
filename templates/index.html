@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Решение СЛАУ</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', Tahoma, sans-serif;
+      background: linear-gradient(135deg, #e0f7fa, #e8eaf6);
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      padding: 2rem;
+      min-height: 100vh;
+    }
+    .container {
+      background: #ffffff;
+      width: 100%;
+      max-width: 800px;
+      border-radius: 16px;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+      padding: 2rem 2.5rem;
+      border-top: 5px solid #4fc3f7;
+    }
+    h1 {
+      text-align: center;
+      color: #37474f;
+      margin-bottom: 2rem;
+    }
+    form {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 1.5rem;
+    }
+    label {
+      font-weight: 600;
+      color: #37474f;
+      margin-bottom: 0.3rem;
+      display: block;
+    }
+    textarea, input, select {
+      width: 100%;
+      padding: 0.75rem;
+      border: 1px solid #b0bec5;
+      border-radius: 8px;
+      font-size: 1rem;
+      background: #f8f9fa;
+      transition: all 0.3s ease;
+    }
+    textarea:focus, input:focus, select:focus {
+      outline: none;
+      border-color: #29b6f6;
+      box-shadow: 0 0 0 3px rgba(41, 182, 246, 0.2);
+      background: #ffffff;
+    }
+    button {
+      background: linear-gradient(90deg, #42a5f5, #1e88e5);
+      color: #fff;
+      border: none;
+      padding: 0.75rem 1.5rem;
+      font-size: 1rem;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background 0.3s ease;
+      justify-self: start;
+    }
+    button:hover {
+      background: linear-gradient(90deg, #1e88e5, #1565c0);
+    }
+    .steps, .result {
+      margin-top: 2.5rem;
+      padding: 1.5rem;
+      border-radius: 12px;
+    }
+    .steps {
+      background: #f1f8e9;
+      border: 1px solid #c5e1a5;
+    }
+    .steps h2 {
+      margin-bottom: 1rem;
+      color: #33691e;
+    }
+    .steps ol {
+      padding-left: 1.2rem;
+      color: #4e342e;
+    }
+    .result {
+      background: #e3f2fd;
+      border: 1px solid #90caf9;
+      color: #0d47a1;
+      font-size: 1.1rem;
+      font-weight: 600;
+    }
+    .steps pre {
+      background: #fafafa;
+      padding: 0.75rem;
+      border-radius: 6px;
+      font-family: Consolas, monospace;
+      font-size: 0.95rem;
+      margin: 0.5rem 0;
+      border-left: 4px solid #aed581;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Решение систем линейных уравнений</h1>
+    <form method="post">
+      <div>
+        <label for="matrix">Матрица A (строки — Enter, числа — через пробел):</label>
+        <textarea id="matrix" name="matrix" rows="4">4 1 2
+3 5 1
+1 1 3</textarea>
+      </div>
+      <div>
+        <label for="vector">Вектор b (через пробел):</label>
+        <input id="vector" name="vector" type="text" value="4 7 3">
+      </div>
+      <div>
+        <label for="method">Метод:</label>
+        <select id="method" name="method">
+          <option value="gauss" {% if method=='gauss' %}selected{% endif %}>Гаусса</option>
+          <option value="gauss_jordan" {% if method=='gauss_jordan' %}selected{% endif %}>Жордана–Гаусса</option>
+          <option value="cramer" {% if method=='cramer' %}selected{% endif %}>Крамера</option>
+          <option value="iteration" {% if method=='iteration' %}selected{% endif %}>Итераций</option>
+          <option value="seidel" {% if method=='seidel' %}selected{% endif %}>Зейделя</option>
+        </select>
+      </div>
+      <button type="submit">Решить</button>
+    </form>
+
+    {% if steps %}
+    <div class="steps">
+      <h2>Шаги решения ({{ 'метод Гаусса' if method=='gauss' else method }}):</h2>
+      <ol>
+        {% for step in steps %}
+        <li>
+          <pre>{{ step }}</pre>
+        </li>
+        {% endfor %}
+      </ol>
+    </div>
+    {% endif %}
+
+    {% if x is not none %}
+    <div class="result">
+      Результат: x = [{{ x | join(', ') }}]
+    </div>
+    {% endif %}
+  </div>
+</body>
+</html>
