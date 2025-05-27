@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify,  send_from_directory
 import numpy as np
 
 app = Flask(__name__)
@@ -283,6 +283,10 @@ def solve_seidel(A, b, eps=1e-8, max_iter=1000):
 @app.route('/')
 def index():
     return render_template('index.html')
+
+@app.route('/img/<path:filename>')
+def serve_image(filename):
+    return send_from_directory('img', filename)
 
 @app.route('/solve', methods=['POST'])
 def solve():

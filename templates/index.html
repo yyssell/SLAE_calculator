@@ -5,24 +5,47 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Решение СЛАУ</title>
   <style>
+    /*body {*/
+    /*  font-family: 'Segoe UI', Tahoma, sans-serif;*/
+    /*  background-color: #e3f2fd;*/
+    /*  background-image: url("data:image/svg+xml,%3Csvg width='40' height='40' viewBox='0 0 100 100' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Ctext x='5' y='35' font-size='30' fill='%2390caf9'%3E%CE%A3%3C/text%3E%3Ctext x='50' y='85' font-size='30' fill='%2390caf9'%3E%CF%80%3C/text%3E%3Ctext x='25' y='70' font-size='25' fill='%2390caf9'%3E%CF%86%3C/text%3E%3C/svg%3E");*/
+    /*  background-repeat: repeat;*/
+    /*  display: flex;*/
+    /*  justify-content: center;*/
+    /*  align-items: flex-start;*/
+    /*  padding: 2rem;*/
+    /*  min-height: 100vh;*/
+    /*}*/
+
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      font-family: 'Segoe UI', Tahoma, sans-serif;
-      background: linear-gradient(135deg, #e0f7fa, #e8eaf6);
-      display: flex;
-      justify-content: center;
-      align-items: flex-start;
-      padding: 2rem;
-      min-height: 100vh;
+
+    * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
     }
+
+    body {
+        font-family: 'Segoe UI', Tahoma, sans-serif;
+        background-image: url("../img/photo.png");
+        background-repeat: repeat;
+        background-size: cover;
+        background-attachment: fixed;
+        display: flex;
+        justify-content: center;
+        align-items: flex-start;
+        padding: 2rem;
+        min-height: 100vh;
+    }
+
     .container {
-      background: #ffffff;
+      background: #d4d9e4;
       width: 100%;
       max-width: 800px;
       border-radius: 16px;
-      box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+      box-shadow: 0 20px 35px rgba(0,0,0,0.30);
       padding: 2rem 2.5rem;
-      border-top: 5px solid #4fc3f7;
+      border: 5px solid #4fc3f7;
     }
     h1 {
       text-align: center;
@@ -191,6 +214,8 @@
       <option value="5">5 × 5</option>
     </select>
 
+    <div id="error" style="color: red; font-weight: bold; margin-bottom: 1rem; display: none;"></div>
+
     <form id="gaussForm" autocomplete="off" spellcheck="false">
       <table id="inputTable" aria-label="Ввод коэффициентов системы">
         <!-- Таблица будет динамически генерироваться -->
@@ -224,6 +249,23 @@
     const container = document.getElementById('inputTable');
     const sizeSelect = document.getElementById('sizeSelect');
 
+    function checkAllFieldsFilled() {
+      const inputs = container.querySelectorAll('input');
+      const errorDiv = document.getElementById('error');
+
+      let allFilled = true;
+      inputs.forEa ch(input => {
+        if (input.value.trim() === '') {
+          allFilled = false;
+        }
+      });
+
+      if (allFilled) {
+        errorDiv.style.display = 'none';
+        errorDiv.textContent = '';
+      }
+    }
+
     // Создание индексного нижнего индекса для переменных (1, 2, 3...)
     function subIndex(num) {
       const sub = ['₀','₁','₂','₃','₄','₅','₆','₇','₈','₉'];
@@ -247,6 +289,14 @@
           input.step = 'any';
           input.value = ''; // пустые по умолчанию
           td.appendChild(input);
+
+            // Убираем красную рамку при вводе
+            input.addEventListener('input', () => {
+              if (input.value.trim() !== '') {
+                input.style.borderColor = '';
+                checkAllFieldsFilled();
+              }
+            });
 
           // Добавим знак + или = и x с индексом, кроме последнего столбца
           const span = document.createElement('span');
@@ -275,8 +325,17 @@
 
         tr.style.userSelect = 'none';
         container.appendChild(tr);
+
+        // Убираем красную рамку при вводе (для B)
+        inputB.addEventListener('input', () => {
+          if (inputB.value.trim() !== '') {
+            inputB.style.borderColor = '';
+            checkAllFieldsFilled();
+          }
+        });
       }
     }
+
 
     // Переход по стрелкам
     function addArrowNavigation() {
@@ -315,10 +374,36 @@
       document.getElementById('result').style.display = 'none';
     });
 
+
+
     // AJAX отправка формы
     document.getElementById('gaussForm').addEventListener('submit', async function(e) {
       e.preventDefault();
-      const formData = new FormData(e.target);
+
+        const errorDiv = document.getElementById('error');
+        errorDiv.style.display = 'none';
+        errorDiv.textContent = '';
+
+        const inputs = container.querySelectorAll('input');
+        let hasEmpty = false;
+
+        inputs.forEach(input => {
+            if (input.value.trim() === '') {
+                hasEmpty = true;
+                input.style.borderColor = 'red'; // выделим пустые поля
+            } else {
+                input.style.borderColor = ''; // сброс цвета
+            }
+        });
+
+        if (hasEmpty) {
+            errorDiv.textContent = 'Пожалуйста, заполните все поля перед решением.';
+            errorDiv.style.display = 'block';
+            return;
+        }
+
+
+        const formData = new FormData(e.target);
 
       formData.set('size', sizeSelect.value);
       formData.set('method', document.getElementById('method').value);
