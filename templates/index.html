@@ -230,6 +230,11 @@
           <option value="seidel">Метод Зейделя</option>
         </select>
       </div>
+        <div id="iterationCountWrapper" style="margin-top: 1rem; display: none;">
+          <label for="iterations">Число итераций:</label>
+          <input type="number" id="iterations" name="iterations" min="1" value="10" />
+        </div>
+
       <button type="submit">Решить</button>
     </form>
 
@@ -243,11 +248,32 @@
 
       <div class="result" id="solutionBottom"></div>
     </div>
+<div class="history">
+      <h2>История решений:</h2>
+        <button class="clear-history-btn" onclick="clearHistory()">Очистить историю</button>
+      <div id="historyList"></div>
+    </div>
   </div>
 
   <script>
     const container = document.getElementById('inputTable');
     const sizeSelect = document.getElementById('sizeSelect');
+
+    const methodSelect = document.getElementById('method');
+    const iterationCountWrapper = document.getElementById('iterationCountWrapper');
+    const iterationsInput = document.getElementById('iterations');
+    const historyList = document.getElementById('historyList');
+
+
+    methodSelect.addEventListener('change', () => {
+      const method = methodSelect.value;
+      if (method === 'iteration' || method === 'seidel') {
+        iterationCountWrapper.style.display = 'block';
+      } else {
+        iterationCountWrapper.style.display = 'none';
+      }
+    });
+
 
     function checkAllFieldsFilled() {
       const inputs = container.querySelectorAll('input');
@@ -374,6 +400,85 @@
       document.getElementById('result').style.display = 'none';
     });
 
+    function updateHistory(resultText, formData) {
+        const history = JSON.parse(localStorage.getItem('slaeHistory')) || [];
+        const methodMap = {
+            gauss: 'Метод Гаусса',
+            gauss_jordan: 'Метод Жордана–Гаусса',
+            cramer: 'Метод Крамера',
+            iteration: 'Метод итераций',
+            seidel: 'Метод Зейделя'
+        };
+
+        const methodCode = formData.get('method');
+        const methodName = methodMap[methodCode] || methodCode;
+
+        const snapshot = {
+            resultText,
+            form: Object.fromEntries(formData.entries()),
+            methodName,
+            timestamp: new Date().toLocaleString()
+        };
+        history.unshift(snapshot);
+        if (history.length > 5) history.length = 5;
+        localStorage.setItem('slaeHistory', JSON.stringify(history));
+        renderHistory();
+    }
+
+    function renderHistory() {
+        const history = JSON.parse(localStorage.getItem('slaeHistory')) || [];
+        historyList.innerHTML = '';
+        history.forEach((entry, index) => {
+            if (!entry || !entry.form) return;  // <-- пропускаем повреждённые записи
+            const div = document.createElement('div');
+            div.className = 'history-entry';
+            div.innerHTML = `<strong>${entry.timestamp}</strong><br/><em>${entry.methodName}</em><br/>${entry.resultText}`;
+            div.title = 'Нажмите, чтобы загрузить это решение';
+            div.onclick = () => {
+                if (entry.form) {
+                    loadHistoryEntry(entry.form);
+                } else {
+                    alert('Ошибка: данные решения повреждены');
+                }
+            };
+            historyList.appendChild(div);
+        });
+    }
+
+function clearHistory() {
+      localStorage.removeItem('slaeHistory');
+      renderHistory();
+    }
+
+    function loadHistoryEntry(form) {
+        sizeSelect.value = form.size;
+        sizeSelect.dispatchEvent(new Event('change')); // важно!
+
+        methodSelect.value = form.method;
+        methodSelect.dispatchEvent(new Event('change'));
+
+        generateTable(+form.size);
+        addArrowNavigation();
+
+        // Ждём DOM-обновление
+        requestAnimationFrame(() => {
+            const size = +form.size;
+            for (let i = 0; i < size; i++) {
+                for (let j = 0; j < size; j++) {
+                    const name = `a${i}${j}`;
+                    const input = document.querySelector(`input[name="${name}"]`);
+                    if (input) input.value = form[name];
+                }
+                const bName = `b${i}`;
+                const bInput = document.querySelector(`input[name="${bName}"]`);
+                if (bInput) bInput.value = form[bName];
+            }
+
+            if (form.iterations !== undefined) {
+                iterationsInput.value = form.iterations;
+            }
+        });
+    }
 
 
     // AJAX отправка формы
@@ -402,11 +507,15 @@
             return;
         }
 
-
         const formData = new FormData(e.target);
 
       formData.set('size', sizeSelect.value);
       formData.set('method', document.getElementById('method').value);
+
+        if (methodSelect.value === 'iteration' || methodSelect.value === 'seidel') {
+          formData.set('iterations', iterationsInput.value);
+        }
+
 
       const response = await fetch('/solve', {
         method: 'POST',
@@ -436,7 +545,10 @@
       solutionBottom.textContent = resultText;
 
       resultDiv.style.display = 'block';
+
+      updateHistory(resultText, formData);
     });
+    renderHistory();
   </script>
 </body>
 </html>

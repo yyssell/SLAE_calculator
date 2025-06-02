@@ -7,7 +7,7 @@ def matrix_to_str(M):
     return '\n'.join(['\t'.join(f"{v:.4g}" for v in row) for row in M])
 
 
-# ---------- Методы решения ----------
+# ----------Методы решения----------
 
 # ---------- Метод Гаусса с сохранением шагов ----------
 def solve_gauss(A, b):
@@ -96,31 +96,31 @@ def solve_gauss_jordan(A, b):
     return x.tolist(), steps
 
 
-def get_det(m, steps, level=0):
-    indent = "  " * level
-    if len(m) == 1:
-        steps.append(f"{indent}Определитель 1x1: {m[0, 0]:.2f}")
-        return m[0, 0]
-    elif len(m) == 2:
-        det = m[0, 0] * m[1, 1] - m[0, 1] * m[1, 0]
-        steps.append(
-            f"{indent}Определитель 2x2: ({m[0, 0]:.2f}×{m[1, 1]:.2f}) - ({m[0, 1]:.2f}×{m[1, 0]:.2f}) = {det:.2f}")
-        return det
-    else:
-        D = 0
-        steps.append(f"{indent}Разложение по 1-й строке матрицы {m.shape}:")
-        for i in range(m.shape[1]):
-            steps.append(f"{indent}≡ Элемент A[0,{i}] = {m[0, i]:.2f}")
-            minor = np.delete(np.delete(m, 0, axis=0), i, axis=1)
-            steps.append(f"{indent}≡ Минор для элемента {m[0, i]:.2f}:")
-            steps.append(f"{indent}" + matrix_to_str(minor))
-            minor_det = get_det(minor, steps, level + 1)
-            sign = (-1) ** i
-            term = sign * m[0, i] * minor_det
-            steps.append(f"{indent}≡ (-1)^{i} × {m[0, i]:.2f} × {minor_det:.2f} = {term:.2f}")
-            D += term
-            steps.append(f"{indent}≡ Промежуточный определитель: {D:.2f}")
-        return D
+# def get_det(m, steps, level=0):
+#     indent = "  " * level
+#     if len(m) == 1:
+#         steps.append(f"{indent}Определитель 1x1: {m[0, 0]:.2f}")
+#         return m[0, 0]
+#     elif len(m) == 2:
+#         det = m[0, 0] * m[1, 1] - m[0, 1] * m[1, 0]
+#         steps.append(
+#             f"{indent}Определитель 2x2: ({m[0, 0]:.2f}×{m[1, 1]:.2f}) - ({m[0, 1]:.2f}×{m[1, 0]:.2f}) = {det:.2f}")
+#         return det
+#     else:
+#         D = 0
+#         steps.append(f"{indent}Разложение по 1-й строке матрицы {m.shape}:")
+#         for i in range(m.shape[1]):
+#             steps.append(f"{indent}≡ Элемент A[0,{i}] = {m[0, i]:.2f}")
+#             minor = np.delete(np.delete(m, 0, axis=0), i, axis=1)
+#             steps.append(f"{indent}≡ Минор для элемента {m[0, i]:.2f}:")
+#             steps.append(f"{indent}" + matrix_to_str(minor))
+#             minor_det = get_det(minor, steps, level + 1)
+#             sign = (-1) ** i
+#             term = sign * m[0, i] * minor_det
+#             steps.append(f"{indent}≡ (-1)^{i} × {m[0, i]:.2f} × {minor_det:.2f} = {term:.2f}")
+#             D += term
+#             steps.append(f"{indent}≡ Промежуточный определитель: {D:.2f}")
+#         return D
 
 
 def solve_cramer(A, b):
@@ -162,16 +162,28 @@ def solve_cramer(A, b):
 
 
 
-def solve_iteration(A, b, eps=1e-8, max_iter=1000):
+def solve_iteration(A, b, eps=1e-8, max_iter=1000, iterations_count=None):
     steps = []
     A = np.array(A, dtype=float)
     b = np.array(b, dtype=float)
     n = len(A)
 
-    # Инициализация
+    # Проверка диагонального преобладания
+    diag_dom = all(abs(A[i, i]) > sum(abs(A[i, j]) for j in range(n) if j != i) for i in range(n))
+    steps.append("Проверка на диагональное преобладание:")
+    steps.append("Да" if diag_dom else "Нет")
+
+    # Построение α и β
     alpha = -A / A.diagonal().reshape(-1, 1)
     np.fill_diagonal(alpha, 0)
     beta = b / A.diagonal()
+
+    # Проверка нормы матрицы α (по строкам)
+    alpha_norm = np.max(np.sum(np.abs(alpha), axis=1))
+    steps.append(f"Норма матрицы α (макс. сумма по строкам): {alpha_norm:.6f}")
+    if not diag_dom and alpha_norm >= 1:
+        steps.append("Система не удовлетворяет условиям сходимости метода итераций (нет диагонального преобладания и ||α|| ≥ 1).")
+        return None, steps
 
     steps.append("Матрица A:")
     steps.append(matrix_to_str(A))
@@ -189,7 +201,8 @@ def solve_iteration(A, b, eps=1e-8, max_iter=1000):
     results_list = [x_prev.copy()]
     iterations = 0
 
-    for iteration in range(1, max_iter + 1):
+    target_iter = iterations_count or max_iter
+    for iteration in range(1, target_iter + 1):
         x = beta + np.dot(alpha, x_prev)
         delta = np.max(np.abs(x - x_prev))
 
@@ -202,24 +215,28 @@ def solve_iteration(A, b, eps=1e-8, max_iter=1000):
         results_list.append(x.copy())
         iterations += 1
 
-        if delta < eps:
+        if iterations_count is None and delta < eps:
             steps.append(f"\nДостигнута требуемая точность: Δ < ε ({delta:.2e} < {eps})")
             break
         x_prev = x
     else:
-        steps.append(f"\nПревышено максимальное число итераций ({max_iter}), возможно, метод расходится.")
+        steps.append(f"\nПревышено максимальное число итераций ({iterations_count})")
 
     steps.append(f"\nЧисло итераций: {iterations}")
-
-
     return x.tolist(), steps
 
 
-def solve_seidel(A, b, eps=1e-8, max_iter=1000):
+
+def solve_seidel(A, b, eps=1e-8, max_iter=1000, iterations_count=None):
     steps = []
     A = np.array(A, dtype=float)
     b = np.array(b, dtype=float)
     n = len(A)
+
+    # Проверка диагонального преобладания
+    diag_dom = all(abs(A[i, i]) > sum(abs(A[i, j]) for j in range(n) if j != i) for i in range(n))
+    steps.append("Проверка на диагональное преобладание:")
+    steps.append("Да" if diag_dom else "Нет")
 
     C = A.T @ A
     d = A.T @ b
@@ -232,6 +249,13 @@ def solve_seidel(A, b, eps=1e-8, max_iter=1000):
     alpha = -C / C.diagonal().reshape(-1, 1)
     np.fill_diagonal(alpha, 0)
     beta = d / C.diagonal()
+
+    # Норма α для Сейделя
+    alpha_norm = np.max(np.sum(np.abs(alpha), axis=1))
+    steps.append(f"Норма матрицы α (по строкам): {alpha_norm:.6f}")
+    if not diag_dom and alpha_norm >= 1:
+        steps.append("Система не удовлетворяет условиям сходимости метода Зейделя (нет диагонального преобладания и ||α|| ≥ 1).")
+        return None, steps
 
     steps.append("\nМатрица α (α = -C / diag(C), без диагонали):")
     steps.append(matrix_to_str(alpha))
@@ -249,7 +273,8 @@ def solve_seidel(A, b, eps=1e-8, max_iter=1000):
     iterations = 0
     results_list = [x_prev.copy()]
 
-    for iteration in range(1, max_iter + 1):
+    target_iter = iterations_count or max_iter
+    for iteration in range(1, target_iter + 1):
         inv_matrix = np.linalg.inv(E - L)
         x = inv_matrix @ (U @ x_prev + beta)
 
@@ -263,12 +288,12 @@ def solve_seidel(A, b, eps=1e-8, max_iter=1000):
         steps.append('\t'.join(f"{val:.8f}" for val in x))
         steps.append(f"Максимальное изменение: {delta:.2e}")
 
-        if delta < eps:
+        if iterations_count is None and delta < eps:
             steps.append(f"\nДостигнута требуемая точность: Δ < ε ({delta:.2e} < {eps})")
             break
         x_prev = x
     else:
-        steps.append(f"\nПревышено максимальное число итераций ({max_iter}), возможно, метод расходится.")
+        steps.append(f"\nПревышено максимальное число итераций ({iterations_count})")
 
     steps.append(f"\nЧисло итераций: {iterations}")
     steps.append("Решение:")
@@ -278,7 +303,8 @@ def solve_seidel(A, b, eps=1e-8, max_iter=1000):
     return x.tolist(), steps
 
 
-# ---------- Flask-маршруты ----------
+
+# ----------Flask-маршруты----------
 
 @app.route('/')
 def index():
@@ -295,6 +321,9 @@ def solve():
         method = request.form.get('method', 'gauss')  # по умолчанию метод Гаусса
         size = int(request.form.get('size', 3))
 
+        iter_count_str = request.form.get('iterations')
+        iterations_count = int(iter_count_str) if iter_count_str and iter_count_str.isdigit() else None
+
         for i in range(size):
             row = []
             for j in range(size):
@@ -310,9 +339,9 @@ def solve():
         elif method == 'cramer':
             x, steps = solve_cramer(A, b)
         elif method == 'iteration':
-            x, steps = solve_iteration(A, b)
+            x, steps = solve_iteration(A, b, iterations_count=iterations_count)
         elif method == 'seidel':
-            x, steps = solve_seidel(A, b)
+            x, steps = solve_seidel(A, b, iterations_count=iterations_count)
         else:
             return jsonify({'x': None, 'steps': [f"Метод '{method}' ещё не реализован."]})
 
