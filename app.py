@@ -14,39 +14,39 @@ def solve_gauss(A, b):
     steps = []
     A = np.array(A, dtype=float)
     b = np.array(b, dtype=float)
-    augmented = np.hstack((A, b.reshape(-1, 1)))
-    n = len(augmented)
-    steps.append("Исходная расширенная матрица [A|b]:\n" + matrix_to_str(augmented))
+    full_matrix = np.hstack((A, b.reshape(-1, 1)))
+    n = len(full_matrix)
+    steps.append("Исходная расширенная матрица [A|b]:\n" + matrix_to_str(full_matrix))
 
     for i in range(n):
         steps.append(f"\nЭтап {i + 1}: Исключение x{i + 1}")
         max_row = i
         for j in range(i, n):
-            if abs(augmented[j][i]) > abs(augmented[max_row][i]):
+            if abs(full_matrix[j][i]) > abs(full_matrix[max_row][i]):
                 max_row = j
-        steps.append(f"Выбран ведущий элемент: {augmented[max_row][i]:.2f} (строка {max_row + 1})")
+        steps.append(f"Выбран ведущий элемент: {full_matrix[max_row][i]:.2f} (строка {max_row + 1})")
         if max_row != i:
-            augmented[[i, max_row]] = augmented[[max_row, i]]
+            full_matrix[[i, max_row]] = full_matrix[[max_row, i]]
             steps.append(f"Перестановка строк {i + 1} и {max_row + 1}")
-            steps.append("Матрица после перестановки:\n" + matrix_to_str(augmented))
+            steps.append("Матрица после перестановки:\n" + matrix_to_str(full_matrix))
 
-        pivot = augmented[i][i]
-        if abs(pivot) < 1e-10:
+        leading_element = full_matrix[i][i]
+        if abs(leading_element) < 1e-10:
             steps.append("Нулевой ведущий элемент — система несовместна или имеет бесконечно много решений.")
             return None, steps
 
         for j in range(i + 1, n):
-            factor = augmented[j][i] / pivot
-            augmented[j] -= factor * augmented[i]
+            factor = full_matrix[j][i] / leading_element
+            full_matrix[j] -= factor * full_matrix[i]
             steps.append(f"Строка {j + 1} = Строка {j + 1} - ({factor:.2f}) × Строка {i + 1}")
-            steps.append("Результат:\n" + matrix_to_str(augmented))
+            steps.append("Результат:\n" + matrix_to_str(full_matrix))
 
     x = np.zeros(n)
     steps.append("\nОбратный ход:")
     for i in range(n - 1, -1, -1):
-        known_sum = sum(augmented[i][j] * x[j] for j in range(i + 1, n))
-        x[i] = (augmented[i][-1] - known_sum) / augmented[i][i]
-        steps.append(f"x{i + 1} = ({augmented[i][-1]:.2f} - {known_sum:.2f}) / {augmented[i][i]:.2f} = {x[i]:.2f}")
+        known_sum = sum(full_matrix[i][j] * x[j] for j in range(i + 1, n))
+        x[i] = (full_matrix[i][-1] - known_sum) / full_matrix[i][i]
+        steps.append(f"x{i + 1} = ({full_matrix[i][-1]:.2f} - {known_sum:.2f}) / {full_matrix[i][i]:.2f} = {x[i]:.2f}")
 
     return x.tolist(), steps
 
@@ -56,39 +56,39 @@ def solve_gauss_jordan(A, b):
     steps = []
     A = np.array(A, dtype=float)
     b = np.array(b, dtype=float)
-    augmented = np.hstack((A, b.reshape(-1, 1)))
-    n = len(augmented)
-    steps.append("Исходная расширенная матрица [A|b]:\n" + matrix_to_str(augmented))
+    full_matrix = np.hstack((A, b.reshape(-1, 1)))
+    n = len(full_matrix)
+    steps.append("Исходная расширенная матрица [A|b]:\n" + matrix_to_str(full_matrix))
 
     for i in range(n):
         steps.append(f"\nЭтап {i + 1}: Обнуление столбца x{i + 1}")
         max_row = i
         for j in range(i, n):
-            if abs(augmented[j][i]) > abs(augmented[max_row][i]):
+            if abs(full_matrix[j][i]) > abs(full_matrix[max_row][i]):
                 max_row = j
-        steps.append(f"Выбран ведущий элемент: {augmented[max_row][i]:.2f} (строка {max_row + 1})")
+        steps.append(f"Выбран ведущий элемент: {full_matrix[max_row][i]:.2f} (строка {max_row + 1})")
         if max_row != i:
-            augmented[[i, max_row]] = augmented[[max_row, i]]
+            full_matrix[[i, max_row]] = full_matrix[[max_row, i]]
             steps.append(f"Перестановка строк {i + 1} и {max_row + 1}")
-            steps.append("Матрица после перестановки:\n" + matrix_to_str(augmented))
+            steps.append("Матрица после перестановки:\n" + matrix_to_str(full_matrix))
 
-        pivot = augmented[i][i]
-        if abs(pivot) < 1e-10:
+        leading_element = full_matrix[i][i]
+        if abs(leading_element) < 1e-10:
             steps.append("Нулевой ведущий элемент — система несовместна или имеет бесконечно много решений.")
             return None, steps
 
-        augmented[i] = augmented[i] / pivot
-        steps.append(f"Нормализация строки {i + 1} (делим на {pivot:.2f})")
-        steps.append("Результат:\n" + matrix_to_str(augmented))
+        full_matrix[i] = full_matrix[i] / leading_element
+        steps.append(f"Нормализация строки {i + 1} (делим на {leading_element:.2f})")
+        steps.append("Результат:\n" + matrix_to_str(full_matrix))
 
         for j in range(n):
             if j != i:
-                factor = augmented[j][i]
-                augmented[j] -= factor * augmented[i]
+                factor = full_matrix[j][i]
+                full_matrix[j] -= factor * full_matrix[i]
                 steps.append(f"Строка {j + 1} = Строка {j + 1} - ({factor:.2f}) × Строка {i + 1}")
-                steps.append("Результат:\n" + matrix_to_str(augmented))
+                steps.append("Результат:\n" + matrix_to_str(full_matrix))
 
-    x = augmented[:, -1]
+    x = full_matrix[:, -1]
     steps.append("\nИтог: получена единичная матрица, решения в последнем столбце.")
     for i in range(n):
         steps.append(f"x{i + 1} = {x[i]:.2f}")
@@ -144,15 +144,15 @@ def solve_cramer(A, b):
     x = []
     for i in range(n):
         steps.append(f"\nЗамена {i + 1}-го столбца матрицы A на вектор b для вычисления det(A{i + 1}):")
-        Ai = A.copy()
-        Ai[:, i] = b
-        steps.append(matrix_to_str(Ai))
+        A_copy = A.copy()
+        A_copy[:, i] = b
+        steps.append(matrix_to_str(A_copy))
 
-        det_Ai = np.linalg.det(Ai)
-        steps.append(f"Вычисляем определитель det(A{i + 1}): {det_Ai:.6g}")
+        det_A_copy = np.linalg.det(A_copy)
+        steps.append(f"Вычисляем определитель det(A{i + 1}): {det_A_copy:.6g}")
 
-        xi = det_Ai / det_A
-        steps.append(f"Вычисляем x{i + 1} = det(A{i + 1}) / det(A) = {det_Ai:.6g} / {det_A:.6g} = {xi:.6g}")
+        xi = det_A_copy / det_A
+        steps.append(f"Вычисляем x{i + 1} = det(A{i + 1}) / det(A) = {det_A_copy:.6g} / {det_A:.6g} = {xi:.6g}")
         x.append(xi)
 
     steps.append("\nИтог: решение системы (вектор x):")
@@ -189,7 +189,7 @@ def solve_iteration(A, b, eps=1e-8, max_iter=1000, iterations_count=None):
     steps.append(matrix_to_str(A))
     steps.append("Вектор b:")
     steps.append('\t'.join(f"{val:.6g}" for val in b))
-    steps.append("\nМатрица α (α = -A / diag(A), без диагонали):")
+    steps.append("\nМатрица α (α = -A / diag(A)):")
     steps.append(matrix_to_str(alpha))
     steps.append("Вектор β (β = b / diag(A)):")
     steps.append('\t'.join(f"{val:.6g}" for val in beta))
@@ -207,7 +207,7 @@ def solve_iteration(A, b, eps=1e-8, max_iter=1000, iterations_count=None):
         delta = np.max(np.abs(x - x_prev))
 
         steps.append(f"\nИтерация {iteration}:")
-        steps.append("x⁽ⁿ⁺¹⁾ = β + α * x⁽ⁿ⁾")
+        # steps.append("x⁽ⁿ⁺¹⁾ = β + α * x⁽ⁿ⁾")
         steps.append("Результат:")
         steps.append('\t'.join(f"{val:.8f}" for val in x))
         steps.append(f"Максимальное изменение: {delta:.2e}")
@@ -283,7 +283,7 @@ def solve_seidel(A, b, eps=1e-8, max_iter=1000, iterations_count=None):
         results_list.append(x.copy())
 
         steps.append(f"\nИтерация {iteration}:")
-        steps.append(f"x⁽ⁿ⁺¹⁾ = (E - L)⁻¹ (U x⁽ⁿ⁾ + β)")
+        # steps.append(f"x⁽ⁿ⁺¹⁾ = (E - L)⁻¹ (U x⁽ⁿ⁾ + β)")
         steps.append("Результат:")
         steps.append('\t'.join(f"{val:.8f}" for val in x))
         steps.append(f"Максимальное изменение: {delta:.2e}")
