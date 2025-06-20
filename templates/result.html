@@ -1,16 +1,352 @@
-<!doctype html>
-<html lang="ru">
-<head>
-  <meta charset="utf-8">
-  <title>Результат</title>
-</head>
-<body>
-  <h1>Результат метода {{ method }}</h1>
-  {% if error %}
-    <p style="color: red;">Ошибка: {{ error }}</p>
-  {% else %}
-    <p>Решение x = [{{ x | join(', ') }}]</p>
-  {% endif %}
-  <a href="/">← Вернуться</a>
-</body>
-</html>
+# Импортируем необходимые модули для работы с веб-приложением и математическими операциями.
+from flask import Flask, render_template, request, jsonify, send_from_directory  # Flask — это фреймворк для создания веб-приложений.
+import numpy as np  # NumPy — библиотека для работы с числовыми данными (матрицы, векторы).
+
+# Создаем экземпляр приложения Flask. Это основной объект, который управляет веб-сервером.
+app = Flask(__name__)
+
+# Функция для преобразования матрицы в строку с отформатированными числами.
+def matrix_to_str(M):
+    return '\n'.join(['\t'.join(f"{v:.4g}" for v in row) for row in M])  # Преобразуем каждую строку матрицы в текстовую форму.
+
+# ---------- Методы решения систем уравнений ----------
+# ---------- Метод Гаусса с сохранением шагов ----------
+def solve_gauss(A, b):
+    steps = []  # Список для хранения пошаговых действий (чтобы показать пользователю).
+    A = np.array(A, dtype=float)  # Преобразуем матрицу коэффициентов A в массив NumPy с числами с плавающей точкой.
+    b = np.array(b, dtype=float)  # Преобразуем вектор свободных членов b в массив NumPy.
+    full_matrix = np.hstack((A, b.reshape(-1, 1)))  # Создаем расширенную матрицу [A|b], добавляя b как последний столбец.
+    n = len(full_matrix)  # Получаем размерность системы (число уравнений).
+    steps.append("Исходная расширенная матрица [A|b]:\n" + matrix_to_str(full_matrix))  # Добавляем исходную матрицу в шаги.
+
+    for i in range(n):  # Проходим по всем строкам матрицы.
+        steps.append(f"\nЭтап {i + 1}: Исключение x{i + 1}")  # Указываем текущий этап исключения переменной.
+        max_row = i  # Ищем строку с максимальным элементом в текущем столбце.
+        for j in range(i, n):
+            if abs(full_matrix[j][i]) > abs(full_matrix[max_row][i]):
+                max_row = j  # Обновляем индекс строки с максимальным элементом.
+        steps.append(f"Выбран ведущий элемент: {full_matrix[max_row][i]:.2f} (строка {max_row + 1})")  # Показываем выбранный элемент.
+
+        if max_row != i:  # Если ведущий элемент не на текущей строке, меняем строки местами.
+            full_matrix[[i, max_row]] = full_matrix[[max_row, i]]
+            steps.append(f"Перестановка строк {i + 1} и {max_row + 1}")
+            steps.append("Матрица после перестановки:\n" + matrix_to_str(full_matrix))
+
+        leading_element = full_matrix[i][i]  # Ведущий элемент (диагональный элемент текущей строки).
+        if abs(leading_element) < 1e-10:  # Если ведущий элемент близок к нулю, система несовместна или имеет бесконечно много решений.
+            steps.append("Нулевой ведущий элемент — система несовместна или имеет бесконечно много решений.")
+            return None, steps
+
+        for j in range(i + 1, n):  # Обнуляем элементы ниже ведущего элемента.
+            factor = full_matrix[j][i] / leading_element  # Вычисляем множитель для обнуления.
+            full_matrix[j] -= factor * full_matrix[i]  # Вычитаем из строки j строку i, умноженную на множитель.
+            steps.append(f"Строка {j + 1} = Строка {j + 1} - ({factor:.2f}) × Строка {i + 1}")
+            steps.append("Результат:\n" + matrix_to_str(full_matrix))
+
+    x = np.zeros(n)  # Создаем массив для хранения решения.
+    steps.append("\nОбратный ход:")  # Начинаем обратный ход метода Гаусса.
+    for i in range(n - 1, -1, -1):  # Проходим по строкам снизу вверх.
+        known_sum = sum(full_matrix[i][j] * x[j] for j in range(i + 1, n))  # Вычисляем сумму известных значений (Это сумма произведений
+        # коэффициентов матрицы и уже найденных значений переменных.).
+        x[i] = (full_matrix[i][-1] - known_sum) / full_matrix[i][i]  # Находим значение переменной. из значение свободного члена
+        # (последний столбец расширенной матрицы) вычитаем сумма, которую мы только что вычислили и делим это все на диагональный
+        # элемент текущей строки
+        steps.append(f"x{i + 1} = ({full_matrix[i][-1]:.2f} - {known_sum:.2f}) / {full_matrix[i][i]:.2f} = {x[i]:.2f}")
+
+    return x.tolist(), steps  # Возвращаем решение и пошаговые действия.
+
+# ---------- Метод Гаусса-Жордана ----------
+def solve_gauss_jordan(A, b):
+    steps = []  # Список для хранения пошаговых действий.
+    A = np.array(A, dtype=float)  # Преобразуем матрицу A в массив NumPy.
+    b = np.array(b, dtype=float)  # Преобразуем вектор b в массив NumPy.
+    full_matrix = np.hstack((A, b.reshape(-1, 1)))  # Создаем расширенную матрицу [A|b].
+    n = len(full_matrix)  # Получаем размерность системы.
+    steps.append("Исходная расширенная матрица [A|b]:\n" + matrix_to_str(full_matrix))  # Добавляем исходную матрицу в шаги.
+
+    for i in range(n):  # Проходим по всем строкам матрицы.
+        steps.append(f"\nЭтап {i + 1}: Обнуление столбца x{i + 1}")  # Указываем текущий этап обнуления столбца.
+        max_row = i  # Ищем строку с максимальным элементом в текущем столбце.
+        for j in range(i, n):
+            if abs(full_matrix[j][i]) > abs(full_matrix[max_row][i]):
+                max_row = j  # Обновляем индекс строки с максимальным элементом.
+        steps.append(f"Выбран ведущий элемент: {full_matrix[max_row][i]:.2f} (строка {max_row + 1})")  # Показываем выбранный элемент.
+
+        if max_row != i:  # Если ведущий элемент не на текущей строке, меняем строки местами.
+            full_matrix[[i, max_row]] = full_matrix[[max_row, i]]
+            steps.append(f"Перестановка строк {i + 1} и {max_row + 1}")
+            steps.append("Матрица после перестановки:\n" + matrix_to_str(full_matrix))
+
+        leading_element = full_matrix[i][i]  # Ведущий элемент (диагональный элемент текущей строки).
+        if abs(leading_element) < 1e-10:  # Если ведущий элемент близок к нулю, система несовместна или имеет бесконечно много решений.
+            steps.append("Нулевой ведущий элемент — система несовместна или имеет бесконечно много решений.")
+            return None, steps
+
+        full_matrix[i] = full_matrix[i] / leading_element  # Нормализуем строку, деля все элементы на ведущий элемент.
+        steps.append(f"Нормализация строки {i + 1} (делим на {leading_element:.2f})")
+        steps.append("Результат:\n" + matrix_to_str(full_matrix))
+
+        for j in range(n):  # Обнуляем элементы в текущем столбце, кроме ведущего.
+            if j != i:
+                factor = full_matrix[j][i]  # Вычисляем множитель для обнуления.
+                full_matrix[j] -= factor * full_matrix[i]  # Вычитаем из строки j строку i, умноженную на множитель.
+                steps.append(f"Строка {j + 1} = Строка {j + 1} - ({factor:.2f}) × Строка {i + 1}")
+                steps.append("Результат:\n" + matrix_to_str(full_matrix))
+
+    x = full_matrix[:, -1]  # Решение находится в последнем столбце матрицы.
+    steps.append("\nИтог: получена единичная матрица, решения в последнем столбце.")  # Показываем результат.
+    for i in range(n):
+        steps.append(f"x{i + 1} = {x[i]:.2f}")  # Добавляем значения переменных в шаги.
+
+    return x.tolist(), steps  # Возвращаем решение и пошаговые действия.
+
+# ---------- Метод Крамера ----------
+def solve_cramer(A, b):
+    steps = []  # Список для хранения пошаговых действий.
+    A = np.array(A, dtype=float)  # Преобразуем матрицу A в массив NumPy.
+    b = np.array(b, dtype=float)  # Преобразуем вектор b в массив NumPy.
+    n = len(A)  # Получаем размерность системы.
+    steps.append("Исходная матрица коэффициентов A:")  # Добавляем исходную матрицу в шаги.
+    steps.append(matrix_to_str(A))
+    steps.append("Вектор свободных членов b:")  # Добавляем вектор b в шаги.
+    steps.append('\t'.join(f"{num:.4g}" for num in b))
+
+    det_A = np.linalg.det(A)  # Вычисляем определитель матрицы A.
+    steps.append(f"\nВычисляем определитель det(A): {det_A:.6g}")  # Добавляем значение определителя в шаги.
+
+    if abs(det_A) < 1e-12:  # Если определитель близок к нулю, система несовместна или имеет бесконечно много решений.
+        steps.append("Определитель близок к нулю — система либо несовместна, либо имеет бесконечно много решений.")
+        return None, steps
+
+    x = []  # Список для хранения решений.
+    for i in range(n):  # Для каждого столбца матрицы A вычисляем определитель замещенной матрицы.
+        steps.append(f"\nЗамена {i + 1}-го столбца матрицы A на вектор b для вычисления det(A{i + 1}):")
+        A_copy = A.copy()  # Создаем копию матрицы A.
+        A_copy[:, i] = b  # Заменяем i-й столбец на вектор b.
+        steps.append(matrix_to_str(A_copy))  # Добавляем замещенную матрицу в шаги.
+        det_A_copy = np.linalg.det(A_copy)  # Вычисляем определитель замещенной матрицы.
+        steps.append(f"Вычисляем определитель det(A{i + 1}): {det_A_copy:.6g}")  # Добавляем значение определителя в шаги.
+        xi = det_A_copy / det_A  # Находим значение переменной по формуле Крамера.
+        steps.append(f"Вычисляем x{i + 1} = det(A{i + 1}) / det(A) = {det_A_copy:.6g} / {det_A:.6g} = {xi:.6g}")
+        x.append(xi)  # Добавляем значение переменной в список решений.
+
+    steps.append("\nИтог: решение системы (вектор x):")  # Показываем итоговое решение.
+    steps.append('\t'.join(f"x{i+1} = {val:.6g}" for i, val in enumerate(x)))  # Добавляем значения переменных в шаги.
+
+    return x, steps  # Возвращаем решение и пошаговые действия.
+
+# ---------- Метод простых итераций ----------
+def solve_iteration(A, b, eps=1e-8, max_iter=1000, iterations_count=None):
+    steps = []  # Список для хранения пошаговых действий.
+    A = np.array(A, dtype=float)  # Преобразуем матрицу A в массив NumPy.
+    b = np.array(b, dtype=float)  # Преобразуем вектор b в массив NumPy.
+    n = len(A)  # Получаем размерность системы.
+
+    # Проверка диагонального преобладания (необходимое условие сходимости метода). Условие диагонального преобладания означает,
+    # что модуль каждого диагонального элемента матрицы должен быть больше , чем сумма модулей всех остальных элементов в той же
+    # строке.
+    diag_dom = all(abs(A[i, i]) > sum(abs(A[i, j]) for j in range(n) if j != i) for i in range(n))
+    steps.append("Проверка на диагональное преобладание:")  # Добавляем результат проверки в шаги.
+    steps.append("Да" if diag_dom else "Нет")
+
+    # Построение матрицы α и вектора β.
+    alpha = -A / A.diagonal().reshape(-1, 1)  # Вычисляем матрицу α.
+    np.fill_diagonal(alpha, 0)  # Обнуляем диагональ матрицы α.
+    beta = b / A.diagonal()  # Вычисляем вектор β.
+
+    # Проверка нормы матрицы α (по строкам).
+    alpha_norm = np.max(np.sum(np.abs(alpha), axis=1))  # Вычисляем максимальную сумму модулей элементов по строкам.
+    steps.append(f"Норма матрицы α (макс. сумма по строкам): {alpha_norm:.6f}")  # Добавляем значение нормы в шаги.
+
+    if not diag_dom and alpha_norm >= 1:  # Если нет диагонального преобладания и норма α ≥ 1, метод не сходится.
+        steps.append("Система не удовлетворяет условиям сходимости метода итераций (нет диагонального преобладания и ||α|| ≥ 1).")
+        return None, steps
+
+    steps.append("Матрица A:")  # Добавляем матрицу A в шаги.
+    steps.append(matrix_to_str(A))
+    steps.append("Вектор b:")  # Добавляем вектор b в шаги.
+    steps.append('\t'.join(f"{val:.6g}" for val in b))
+    steps.append("\nМатрица α (α = -A / diag(A)):")  # Добавляем матрицу α в шаги.
+    steps.append(matrix_to_str(alpha))
+    steps.append("Вектор β (β = b / diag(A)):")  # Добавляем вектор β в шаги.
+    steps.append('\t'.join(f"{val:.6g}" for val in beta))
+
+    x_prev = beta.copy()  # Начальное приближение (x₀ = β).
+    steps.append("\nНачальное приближение (x₀ = β):")  # Добавляем начальное приближение в шаги.
+    steps.append('\t'.join(f"{val:.6g}" for val in x_prev))
+
+    results_list = [x_prev.copy()]  # Список для хранения всех приближений.
+    iterations = 0  # Счетчик итераций.
+    target_iter = iterations_count or max_iter  # Определяем максимальное число итераций.
+
+    for iteration in range(1, target_iter + 1):  # Цикл итераций.
+        x = beta + np.dot(alpha, x_prev)  # Вычисляем новое приближение.
+        delta = np.max(np.abs(x - x_prev))  # Вычисляем максимальное изменение между итерациями.
+        steps.append(f"\nИтерация {iteration}:")  # Добавляем номер итерации в шаги.
+        steps.append("Результат:")  # Добавляем результат текущей итерации в шаги.
+        steps.append('\t'.join(f"{val:.8f}" for val in x))
+        steps.append(f"Максимальное изменение: {delta:.2e}")  # Добавляем максимальное изменение в шаги.
+
+        results_list.append(x.copy())  # Сохраняем текущее приближение.
+        iterations += 1  # Увеличиваем счетчик итераций.
+
+        if iterations_count is None and delta < eps:  # Если достигнута требуемая точность, завершаем цикл.
+            steps.append(f"\nДостигнута требуемая точность: Δ < ε ({delta:.2e} < {eps})")
+            break
+
+        x_prev = x  # Обновляем предыдущее приближение.
+
+    else:  # Если превышено максимальное число итераций.
+        steps.append(f"\nПревышено максимальное число итераций ({iterations_count})")
+
+    steps.append(f"\nЧисло итераций: {iterations}")  # Добавляем общее число итераций в шаги.
+    return x.tolist(), steps  # Возвращаем решение и пошаговые действия.
+
+# ---------- Метод Зейделя ----------
+def solve_seidel(A, b, eps=1e-8, max_iter=1000, iterations_count=None):
+    steps = []  # Список для хранения пошаговых действий.
+    A = np.array(A, dtype=float)  # Преобразуем матрицу A в массив NumPy.
+    b = np.array(b, dtype=float)  # Преобразуем вектор b в массив NumPy.
+    n = len(A)  # Получаем размерность системы.
+
+    # Проверка диагонального преобладания (необходимое условие сходимости метода).
+    diag_dom = all(abs(A[i, i]) > sum(abs(A[i, j]) for j in range(n) if j != i) for i in range(n))
+    steps.append("Проверка на диагональное преобладание:")  # Добавляем результат проверки в шаги.
+    steps.append("Да" if diag_dom else "Нет")
+
+    C = A.T @ A  # Вычисляем матрицу C = AᵀA.
+    d = A.T @ b  # Вычисляем вектор d = Aᵀb.
+    steps.append("Матрица C = AᵀA:")  # Добавляем матрицу C в шаги.
+    steps.append(matrix_to_str(C))
+    steps.append("Вектор d = Aᵀb:")  # Добавляем вектор d в шаги.
+    steps.append('\t'.join(f"{val:.6g}" for val in d))
+
+    alpha = -C / C.diagonal().reshape(-1, 1)  # Вычисляем матрицу α.
+    np.fill_diagonal(alpha, 0)  # Обнуляем диагональ матрицы α.
+    beta = d / C.diagonal()  # Вычисляем вектор β.
+
+    # Норма α для метода Зейделя.
+    alpha_norm = np.max(np.sum(np.abs(alpha), axis=1))  # Вычисляем максимальную сумму модулей элементов по строкам.
+    steps.append(f"Норма матрицы α (по строкам): {alpha_norm:.6f}")  # Добавляем значение нормы в шаги.
+
+    if not diag_dom and alpha_norm >= 1:  # Если нет диагонального преобладания и норма α ≥ 1, метод не сходится.
+        steps.append("Система не удовлетворяет условиям сходимости метода Зейделя (нет диагонального преобладания и ||α|| ≥ 1).")
+        return None, steps
+
+    steps.append("\nМатрица α (α = -C / diag(C), без диагонали):")  # Добавляем матрицу α в шаги.
+    steps.append(matrix_to_str(alpha))
+    steps.append("Вектор β (β = d / diag(C)):")  # Добавляем вектор β в шаги.
+    steps.append('\t'.join(f"{val:.6g}" for val in beta))
+
+    L = np.tril(alpha)  # Нижняя треугольная часть матрицы α.
+    U = np.triu(alpha)  # Верхняя треугольная часть матрицы α.
+    E = np.eye(n)  # Единичная матрица размерности n.
+
+    x_prev = beta.copy()  # Начальное приближение (x₀ = β).
+    steps.append("\nНачальное приближение (x₀ = β):")  # Добавляем начальное приближение в шаги.
+    steps.append('\t'.join(f"{val:.6g}" for val in x_prev))
+
+    iterations = 0  # Счетчик итераций.
+    results_list = [x_prev.copy()]  # Список для хранения всех приближений.
+    target_iter = iterations_count or max_iter  # Определяем максимальное число итераций.
+
+    for iteration in range(1, target_iter + 1):  # Цикл итераций.
+        inv_matrix = np.linalg.inv(E - L)  # Вычисляем обратную матрицу для (E - L).
+        x = inv_matrix @ (U @ x_prev + beta)  # Вычисляем новое приближение.
+        delta = np.max(np.abs(x - x_prev))  # Вычисляем максимальное изменение между итерациями.
+        iterations += 1  # Увеличиваем счетчик итераций.
+        results_list.append(x.copy())  # Сохраняем текущее приближение.
+        steps.append(f"\nИтерация {iteration}:")  # Добавляем номер итерации в шаги.
+        steps.append("Результат:")  # Добавляем результат текущей итерации в шаги.
+        steps.append('\t'.join(f"{val:.8f}" for val in x))
+        steps.append(f"Максимальное изменение: {delta:.2e}")  # Добавляем максимальное изменение в шаги.
+
+        if iterations_count is None and delta < eps:  # Если достигнута требуемая точность, завершаем цикл.
+            steps.append(f"\nДостигнута требуемая точность: Δ < ε ({delta:.2e} < {eps})")
+            break
+
+        x_prev = x  # Обновляем предыдущее приближение.
+
+    else:  # Если превышено максимальное число итераций.
+        steps.append(f"\nПревышено максимальное число итераций ({iterations_count})")
+
+    steps.append(f"\nЧисло итераций: {iterations}")  # Добавляем общее число итераций в шаги.
+    steps.append("Решение:")  # Добавляем итоговое решение в шаги.
+    for i, val in enumerate(x):
+        steps.append(f"x{i + 1} = {val:.8f}")  # Добавляем значения переменных в шаги.
+
+    return x.tolist(), steps  # Возвращаем решение и пошаговые действия.
+
+# ---------- Flask-маршруты ----------
+@app.route('/')  # Определяем маршрут для главной страницы.
+def index():
+    return render_template('index.html')  # Отображаем HTML-шаблон для главной страницы.
+
+@app.route('/img/<path:filename>')  # Определяем маршрут для изображений.
+def serve_image(filename):
+    return send_from_directory('img', filename)  # Отправляем файл из папки 'img'.
+
+@app.route('/solve', methods=['POST'])  # Определяем маршрут для обработки запросов на решение системы.
+def solve():
+    try:
+        A, b = [], []  # Списки для хранения матрицы A и вектора b.
+        method = request.form.get('method', 'gauss')  # Получаем выбранный метод решения (по умолчанию метод Гаусса).
+        size = int(request.form.get('size', 3))  # Получаем размерность системы (по умолчанию 3).
+        iter_count_str = request.form.get('iterations')  # Получаем количество итераций (если указано).
+        iterations_count = int(iter_count_str) if iter_count_str and iter_count_str.isdigit() else None  # Преобразуем в число.
+
+        for i in range(size):  # Читаем матрицу A и вектор b из формы.
+            row = []
+            for j in range(size):
+                row.append(float(request.form[f'a{i}{j}']))  # Добавляем элементы матрицы A.
+            A.append(row)
+            b.append(float(request.form[f'b{i}']))  # Добавляем элементы вектора b.
+
+        # Вызываем выбранный метод решения.
+        if method == 'gauss':
+            x, steps = solve_gauss(A, b)  # Метод Гаусса.
+        elif method == 'gauss_jordan':
+            x, steps = solve_gauss_jordan(A, b)  # Метод Гаусса-Жордана.
+        elif method == 'cramer':
+            x, steps = solve_cramer(A, b)  # Метод Крамера.
+        elif method == 'iteration':
+            x, steps = solve_iteration(A, b, iterations_count=iterations_count)  # Метод простых итераций.
+        elif method == 'seidel':
+            x, steps = solve_seidel(A, b, iterations_count=iterations_count)  # Метод Зейделя.
+        else:
+            return jsonify({'x': None, 'steps': [f"Метод '{method}' ещё не реализован."]})  # Возвращаем ошибку, если метод неизвестен.
+
+        return jsonify({'x': x, 'steps': steps})  # Возвращаем решение и шаги в формате JSON.
+
+    except Exception as e:
+        return jsonify({'x': None, 'steps': [f"Ошибка: {str(e)}"]})  # Возвращаем ошибку в случае исключения.
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=55555, debug=True)  # Запускаем веб-сервер на всех интерфейсах и порту 55555.
+
+
+# def get_det(m, steps, level=0):
+#     indent = "  " * level
+#     if len(m) == 1:
+#         steps.append(f"{indent}Определитель 1x1: {m[0, 0]:.2f}")
+#         return m[0, 0]
+#     elif len(m) == 2:
+#         det = m[0, 0] * m[1, 1] - m[0, 1] * m[1, 0]
+#         steps.append(
+#             f"{indent}Определитель 2x2: ({m[0, 0]:.2f}×{m[1, 1]:.2f}) - ({m[0, 1]:.2f}×{m[1, 0]:.2f}) = {det:.2f}")
+#         return det
+#     else:
+#         D = 0
+#         steps.append(f"{indent}Разложение по 1-й строке матрицы {m.shape}:")
+#         for i in range(m.shape[1]):
+#             steps.append(f"{indent}≡ Элемент A[0,{i}] = {m[0, i]:.2f}")
+#             minor = np.delete(np.delete(m, 0, axis=0), i, axis=1)
+#             steps.append(f"{indent}≡ Минор для элемента {m[0, i]:.2f}:")
+#             steps.append(f"{indent}" + matrix_to_str(minor))
+#             minor_det = get_det(minor, steps, level + 1)
+#             sign = (-1) ** i
+#             term = sign * m[0, i] * minor_det
+#             steps.append(f"{indent}≡ (-1)^{i} × {m[0, i]:.2f} × {minor_det:.2f} = {term:.2f}")
+#             D += term
+#             steps.append(f"{indent}≡ Промежуточный определитель: {D:.2f}")
+#         return D

@@ -1,5 +1,7 @@
-from flask import Flask, render_template, request, jsonify,  send_from_directory
+from flask import Flask, render_template, request, jsonify,  send_from_directory, make_response
 import numpy as np
+import csv
+from io import StringIO
 
 app = Flask(__name__)
 
@@ -29,12 +31,10 @@ def solve_gauss(A, b):
             full_matrix[[i, max_row]] = full_matrix[[max_row, i]]
             steps.append(f"Перестановка строк {i + 1} и {max_row + 1}")
             steps.append("Матрица после перестановки:\n" + matrix_to_str(full_matrix))
-
         leading_element = full_matrix[i][i]
         if abs(leading_element) < 1e-10:
             steps.append("Нулевой ведущий элемент — система несовместна или имеет бесконечно много решений.")
             return None, steps
-
         for j in range(i + 1, n):
             factor = full_matrix[j][i] / leading_element
             full_matrix[j] -= factor * full_matrix[i]
@@ -96,31 +96,7 @@ def solve_gauss_jordan(A, b):
     return x.tolist(), steps
 
 
-# def get_det(m, steps, level=0):
-#     indent = "  " * level
-#     if len(m) == 1:
-#         steps.append(f"{indent}Определитель 1x1: {m[0, 0]:.2f}")
-#         return m[0, 0]
-#     elif len(m) == 2:
-#         det = m[0, 0] * m[1, 1] - m[0, 1] * m[1, 0]
-#         steps.append(
-#             f"{indent}Определитель 2x2: ({m[0, 0]:.2f}×{m[1, 1]:.2f}) - ({m[0, 1]:.2f}×{m[1, 0]:.2f}) = {det:.2f}")
-#         return det
-#     else:
-#         D = 0
-#         steps.append(f"{indent}Разложение по 1-й строке матрицы {m.shape}:")
-#         for i in range(m.shape[1]):
-#             steps.append(f"{indent}≡ Элемент A[0,{i}] = {m[0, i]:.2f}")
-#             minor = np.delete(np.delete(m, 0, axis=0), i, axis=1)
-#             steps.append(f"{indent}≡ Минор для элемента {m[0, i]:.2f}:")
-#             steps.append(f"{indent}" + matrix_to_str(minor))
-#             minor_det = get_det(minor, steps, level + 1)
-#             sign = (-1) ** i
-#             term = sign * m[0, i] * minor_det
-#             steps.append(f"{indent}≡ (-1)^{i} × {m[0, i]:.2f} × {minor_det:.2f} = {term:.2f}")
-#             D += term
-#             steps.append(f"{indent}≡ Промежуточный определитель: {D:.2f}")
-#         return D
+
 
 
 def solve_cramer(A, b):
@@ -161,147 +137,132 @@ def solve_cramer(A, b):
     return x, steps
 
 
-
-def solve_iteration(A, b, eps=1e-8, max_iter=1000, iterations_count=None):
+def solve_iteration(A, b, eps=None, max_iter=1000):
     steps = []
+
+    # Преобразуем входные данные в массивы NumPy
     A = np.array(A, dtype=float)
     b = np.array(b, dtype=float)
-    n = len(A)
+    rows, cols = A.shape
 
-    # Проверка диагонального преобладания
-    diag_dom = all(abs(A[i, i]) > sum(abs(A[i, j]) for j in range(n) if j != i) for i in range(n))
-    steps.append("Проверка на диагональное преобладание:")
-    steps.append("Да" if diag_dom else "Нет")
+    # Формируем расширенную матрицу (a | b)
+    matrix = np.hstack((A, b.reshape(-1, 1)))
 
-    # Построение α и β
-    alpha = -A / A.diagonal().reshape(-1, 1)
-    np.fill_diagonal(alpha, 0)
-    beta = b / A.diagonal()
+    # Преобразуем матрицу
+    for i in range(rows):
+        diag = A[i, i]
+        steps.append(f"\nПреобразование строки {i + 1}:")
+        steps.append(f"Делим элементы строки на диагональный элемент a[{i + 1},{i + 1}] = {diag:.2f}")
+        for j in range(cols):
+            if j != i:
+                matrix[i, j] = -A[i, j] / diag
+                steps.append(f"  a[{i + 1},{j + 1}] = -{A[i, j]:.2f} / {diag:.2f} = {matrix[i, j]:.2f}")
+        matrix[i, cols] = b[i] / diag
+        matrix[i, i] = 0
+        steps.append(f"  b[{i + 1}] = {b[i]:.2f} / {diag:.2f} = {matrix[i, cols]:.2f}")
 
-    # Проверка нормы матрицы α (по строкам)
-    alpha_norm = np.max(np.sum(np.abs(alpha), axis=1))
-    steps.append(f"Норма матрицы α (макс. сумма по строкам): {alpha_norm:.6f}")
-    if not diag_dom and alpha_norm >= 1:
-        steps.append("Система не удовлетворяет условиям сходимости метода итераций (нет диагонального преобладания и ||α|| ≥ 1).")
+    sum_of_squares = np.sqrt(np.sum(matrix[:, :cols] ** 2))
+    if sum_of_squares > 1:
+        steps.append("Условие сходимости не выполняется для метода простых итераций")
         return None, steps
-
-    steps.append("Матрица A:")
-    steps.append(matrix_to_str(A))
-    steps.append("Вектор b:")
-    steps.append('\t'.join(f"{val:.6g}" for val in b))
-    steps.append("\nМатрица α (α = -A / diag(A)):")
-    steps.append(matrix_to_str(alpha))
-    steps.append("Вектор β (β = b / diag(A)):")
-    steps.append('\t'.join(f"{val:.6g}" for val in beta))
-
-    x_prev = beta.copy()
-    steps.append("\nНачальное приближение (x₀ = β):")
-    steps.append('\t'.join(f"{val:.6g}" for val in x_prev))
-
-    results_list = [x_prev.copy()]
-    iterations = 0
-
-    target_iter = iterations_count or max_iter
-    for iteration in range(1, target_iter + 1):
-        x = beta + np.dot(alpha, x_prev)
-        delta = np.max(np.abs(x - x_prev))
-
-        steps.append(f"\nИтерация {iteration}:")
-        # steps.append("x⁽ⁿ⁺¹⁾ = β + α * x⁽ⁿ⁾")
-        steps.append("Результат:")
-        steps.append('\t'.join(f"{val:.8f}" for val in x))
-        steps.append(f"Максимальное изменение: {delta:.2e}")
-
-        results_list.append(x.copy())
-        iterations += 1
-
-        if iterations_count is None and delta < eps:
-            steps.append(f"\nДостигнута требуемая точность: Δ < ε ({delta:.2e} < {eps})")
-            break
-        x_prev = x
     else:
-        steps.append(f"\nПревышено максимальное число итераций ({iterations_count})")
+        if eps is None:
+            eps = 1e-6
 
-    steps.append(f"\nЧисло итераций: {iterations}")
-    return x.tolist(), steps
+        current = matrix[:, cols].copy()
+        distance = eps + 1
+        iter_count = 0
+        result = np.zeros(rows)
+
+        steps.append("\nНачальное приближение:")
+        steps.append(str(current))
+
+        while distance > eps and (max_iter is None or iter_count < max_iter):
+            steps.append(f"\nИтерация {iter_count + 1}:")
+            for i in range(rows):
+                steps.append(f"Обновление x[{i + 1}]:")
+                steps.append(f"  x[{i + 1}] = b[{i + 1}] + (a[{i + 1},j] * x[j])")
+                # В методах solve_iteration и solve_seidel:
+                steps.append(
+                    f"  x[{i + 1}] = {matrix[i, cols]:.2f} + ("
+                    f"{[round(float(x), 2) for x in matrix[i, :cols]]} * "
+                    f"{[round(float(x), 2) for x in current]})"
+                )
+                result[i] = matrix[i, cols] + np.dot(matrix[i, :cols], current)
+                steps.append(f"  x[{i + 1}] = {result[i]:.2f}")
+            distance = np.linalg.norm(result - current)
+            steps.append(f"Расстояние между текущим и предыдущим приближением: {distance:.10f}")
+            current = result.copy()
+            iter_count += 1
+
+        steps.append(f"\nРешение методом простых итераций после {iter_count} итераций:")
+        steps.append(str(result))
 
 
+    return result.tolist(), steps
 
-def solve_seidel(A, b, eps=1e-8, max_iter=1000, iterations_count=None):
+
+def solve_seidel(A, b, eps=None, max_iter=1000):
     steps = []
+    # Преобразуем входные данные в массивы NumPy
     A = np.array(A, dtype=float)
     b = np.array(b, dtype=float)
-    n = len(A)
+    rows, cols = A.shape
+    # Формируем расширенную матрицу (a | b)
+    matrix = np.hstack((A, b.reshape(-1, 1)))
 
-    # Проверка диагонального преобладания
-    diag_dom = all(abs(A[i, i]) > sum(abs(A[i, j]) for j in range(n) if j != i) for i in range(n))
-    steps.append("Проверка на диагональное преобладание:")
-    steps.append("Да" if diag_dom else "Нет")
+    sum_of_squares = 0
+    current = b / np.diag(A)  # начальное приближение (b[i]/a[i,i])
 
-    C = A.T @ A
-    d = A.T @ b
-
-    steps.append("Матрица C = AᵀA:")
-    steps.append(matrix_to_str(C))
-    steps.append("Вектор d = Aᵀb:")
-    steps.append('\t'.join(f"{val:.6g}" for val in d))
-
-    alpha = -C / C.diagonal().reshape(-1, 1)
-    np.fill_diagonal(alpha, 0)
-    beta = d / C.diagonal()
-
-    # Норма α для Сейделя
-    alpha_norm = np.max(np.sum(np.abs(alpha), axis=1))
-    steps.append(f"Норма матрицы α (по строкам): {alpha_norm:.6f}")
-    if not diag_dom and alpha_norm >= 1:
-        steps.append("Система не удовлетворяет условиям сходимости метода Зейделя (нет диагонального преобладания и ||α|| ≥ 1).")
+    # Преобразуем матрицу в итерационную форму
+    for i in range(rows):
+        diag = A[i, i]
+        steps.append(f"Преобразование строки {i + 1}:")
+        steps.append(f"Делим элементы строки на диагональный элемент a[{i + 1},{i + 1}] = {diag:.2f}")
+        for j in range(cols):
+            if j != i:
+                matrix[i, j] = -A[i, j] / diag
+                sum_of_squares += matrix[i, j] ** 2
+                steps.append(f"a[{i + 1},{j + 1}] = -{A[i, j]:.2f} / {diag:.2f} = {matrix[i, j]:.2f}")
+        matrix[i, cols] = b[i] / diag
+        matrix[i, i] = 0
+        steps.append(f"b[{i + 1}] = {b[i]:.2f} / {diag:.2f} = {matrix[i, cols]:.2f}")
+    if np.sqrt(sum_of_squares) > 1:
+        steps.append("Условие сходимости не выполняется для метода Зейделя")
         return None, steps
+    if np.sqrt(sum_of_squares) < 1:
+        if eps is None:
+            eps = 1e-6
 
-    steps.append("\nМатрица α (α = -C / diag(C), без диагонали):")
-    steps.append(matrix_to_str(alpha))
-    steps.append("Вектор β (β = d / diag(C)):")
-    steps.append('\t'.join(f"{val:.6g}" for val in beta))
+        distance = 2 * eps
+        result = current.copy()
+        iter_count = 0
+        steps.append(f"Начальное приближение: {str(current)}")
+        # steps.append()
 
-    L = np.tril(alpha)
-    U = np.triu(alpha)
-    E = np.eye(n)
+        while distance > eps and (max_iter is None or iter_count < max_iter):
+            distance = 0
+            steps.append(f"Итерация {iter_count + 1}:")
 
-    x_prev = beta.copy()
-    steps.append("\nНачальное приближение (x₀ = β):")
-    steps.append('\t'.join(f"{val:.6g}" for val in x_prev))
+            for i in range(rows):
+                old_value = current[i]
 
-    iterations = 0
-    results_list = [x_prev.copy()]
+                result[i] = matrix[i, cols] + np.dot(matrix[i, :cols], current)
+                steps.append(f"Обновление x[{i + 1}]:" + f"\nx[{i + 1}] = b[{i + 1}] + (a[{i + 1},j] * x[j])" + f"\nx[{i + 1}] = {matrix[i, cols]:.2f} + ("
+                    f"{[round(float(x), 2) for x in matrix[i, :cols]]} * "
+                    f"{[round(float(x), 2) for x in current]})" + f"\nx[{i + 1}] = {result[i]:.2f}")
 
-    target_iter = iterations_count or max_iter
-    for iteration in range(1, target_iter + 1):
-        inv_matrix = np.linalg.inv(E - L)
-        x = inv_matrix @ (U @ x_prev + beta)
+                distance += (result[i] - old_value) ** 2
+                current[i] = result[i]  # Обновляем текущее значение сразу (особенность метода Зейделя)
+            distance = np.sqrt(distance)
+            steps.append(f"Расстояние между текущим и предыдущим приближением: {distance:.10f}")
+            iter_count += 1
 
-        delta = np.max(np.abs(x - x_prev))
-        iterations += 1
-        results_list.append(x.copy())
+        steps.append(f"Достигнута требуемоя точность\nРешение методом Зейделя после {iter_count} итераций:")
+        steps.append(str(result))
 
-        steps.append(f"\nИтерация {iteration}:")
-        # steps.append(f"x⁽ⁿ⁺¹⁾ = (E - L)⁻¹ (U x⁽ⁿ⁾ + β)")
-        steps.append("Результат:")
-        steps.append('\t'.join(f"{val:.8f}" for val in x))
-        steps.append(f"Максимальное изменение: {delta:.2e}")
 
-        if iterations_count is None and delta < eps:
-            steps.append(f"\nДостигнута требуемая точность: Δ < ε ({delta:.2e} < {eps})")
-            break
-        x_prev = x
-    else:
-        steps.append(f"\nПревышено максимальное число итераций ({iterations_count})")
-
-    steps.append(f"\nЧисло итераций: {iterations}")
-    steps.append("Решение:")
-    for i, val in enumerate(x):
-        steps.append(f"x{i + 1} = {val:.8f}")
-
-    return x.tolist(), steps
-
+    return result.tolist(), steps
 
 
 # ----------Flask-маршруты----------
@@ -314,41 +275,113 @@ def index():
 def serve_image(filename):
     return send_from_directory('img', filename)
 
+
+@app.route('/generate_txt', methods=['POST'])
+def generate_txt():
+    try:
+        data = request.json
+        content = "Результат решения СЛАУ:\n"
+        content += f"x = [{', '.join(f'{val:.4f}' for val in data['x'])}]\n\n"
+        content += "Шаги решения:\n"
+        content += "\n".join(data['steps'])
+        response = make_response(content)
+        response.headers['Content-Type'] = 'text/plain; charset=utf-8'
+        response.headers['Content-Disposition'] = 'attachment; filename=result.txt'
+        return response
+    except Exception as e:
+        return f"Ошибка: {str(e)}", 500
+
+
+@app.route('/export_csv', methods=['POST'])
+def export_csv():
+    data = request.json
+    A = data.get('A', [])
+    b = data.get('b', [])
+    x = data.get('x', [])
+    steps = data.get('steps', [])
+    csv_buffer = StringIO()
+    csv_writer = csv.writer(csv_buffer)
+    if A:
+        headers = [f'A{i + 1}' for i in range(len(A[0]))] + ['b']
+        csv_writer.writerow(headers)
+        for row in A:
+            csv_row = list(row) + [b[A.index(row)]]
+            csv_writer.writerow(csv_row)
+        csv_writer.writerow([])
+    csv_writer.writerow(['Шаги решения:'])
+    for step in steps:
+        cleaned_step = step.replace('\t', '    ').replace('"', '""')
+        csv_writer.writerow([cleaned_step])
+    csv_writer.writerow(['Решение:'])
+    csv_writer.writerow([f'x = {", ".join(map(str, x))}'])
+    csv_content = csv_buffer.getvalue()
+    response = make_response(f'\ufeff{csv_content}')  # Добавляем BOM
+    response.headers['Content-Type'] = 'text/csv; charset=utf-8'
+    response.headers['Content-Disposition'] = 'attachment; filename=solution.csv'
+    return response
+
 @app.route('/solve', methods=['POST'])
 def solve():
     try:
         A, b = [], []
         method = request.form.get('method', 'gauss')  # по умолчанию метод Гаусса
         size = int(request.form.get('size', 3))
-
-        iter_count_str = request.form.get('iterations')
-        iterations_count = int(iter_count_str) if iter_count_str and iter_count_str.isdigit() else None
-
+        precision_count_str = request.form.get('precision')
+        precision = float(precision_count_str) if precision_count_str else None
         for i in range(size):
             row = []
             for j in range(size):
                 row.append(float(request.form[f'a{i}{j}']))
             A.append(row)
             b.append(float(request.form[f'b{i}']))
-
         # Вызов нужного метода
         if method == 'gauss':
             x, steps = solve_gauss(A, b)
+            solution_data = {
+                'A': A,
+                'b': b,
+                'x': x,
+                'steps': steps
+            }
         elif method == 'gauss_jordan':
             x, steps = solve_gauss_jordan(A, b)
+            solution_data = {
+                'A': A,
+                'b': b,
+                'x': x,
+                'steps': steps
+            }
         elif method == 'cramer':
             x, steps = solve_cramer(A, b)
+            solution_data = {
+                'A': A,
+                'b': b,
+                'x': x,
+                'steps': steps
+            }
         elif method == 'iteration':
-            x, steps = solve_iteration(A, b, iterations_count=iterations_count)
+            x, steps = solve_iteration(A, b, eps=precision)
+            solution_data = {
+                'A': A,
+                'b': b,
+                'x': x,
+                'steps': steps
+            }
         elif method == 'seidel':
-            x, steps = solve_seidel(A, b, iterations_count=iterations_count)
+            x, steps = solve_seidel(A, b, eps=precision)
+            solution_data = {
+                'A': A,
+                'b': b,
+                'x': x,
+                'steps': steps
+            }
         else:
             return jsonify({'x': None, 'steps': [f"Метод '{method}' ещё не реализован."]})
 
-        return jsonify({'x': x, 'steps': steps})
+        return jsonify(solution_data)
 
     except Exception as e:
-        return jsonify({'x': None, 'steps': [f"Ошибка: {str(e)}"]})
+        return jsonify(solution_data)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=55555, debug=True)

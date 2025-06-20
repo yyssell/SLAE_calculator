@@ -189,6 +189,11 @@
         padding: 0.3rem;
         font-size: 0.9rem;
       }
+        input[type="text"] {
+        width: 45px;
+        padding: 0.3rem;
+        font-size: 0.9rem;
+      }
       button {
         width: 100%;
         padding: 0.6rem;
@@ -199,6 +204,70 @@
         padding: 1rem;
       }
     }
+/*.precision-wrapper {*/
+/*  margin-top: 1rem;*/
+/*  display: flex;*/
+/*  flex-direction: column;*/
+/*  align-items: flex-start;*/
+/*  gap: 0.5rem;*/
+/*}*/
+
+/*.precision-controls {*/
+/*  display: flex;*/
+/*  align-items: center;*/
+/*  gap: 0.5rem;*/
+/*}*/
+
+/*.precision-controls input[type="text"] {*/
+/*  width: 100px;*/
+/*  padding: 0.4rem;*/
+/*  border: 1px solid #b0bec5;*/
+/*  border-radius: 8px;*/
+/*  font-size: 1rem;*/
+/*  background: #f8f9fa;*/
+/*  text-align: center;*/
+/*  transition: all 0.3s ease;*/
+/*}*/
+
+/*.precision-controls button {*/
+/*  width: 32px;*/
+/*  height: 32px;*/
+/*  padding: 0;*/
+/*  font-size: 18px;*/
+/*  font-weight: bold;*/
+/*  line-height: 1;*/
+/*  border: 1px solid #b0bec5;*/
+/*  border-radius: 8px;*/
+/*  background: #f8f9fa;*/
+/*  cursor: pointer;*/
+/*  transition: background 0.3s ease;*/
+/*}*/
+
+/*.precision-controls button:hover {*/
+/*  background: #e1f5fe;*/
+/*}*/
+.export-buttons {
+  margin: 1.5rem 0;
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+}
+
+.export-buttons button {
+  background: #4CAF50;
+  color: white;
+  padding: 12px 24px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 1rem;
+  transition: background 0.3s;
+}
+
+.export-buttons button:hover {
+  background: #45a049;
+}
+
   </style>
 </head>
 <body>
@@ -206,7 +275,7 @@
     <h1>Решение систем линейных уравнений</h1>
 
     <label for="sizeSelect">Выберите размерность системы:</label>
-    <br />
+    <!-- <br /> -->
     <select id="sizeSelect" name="sizeSelect" aria-label="Размерность системы">
       <option value="2">2 × 2</option>
       <option value="3" selected>3 × 3</option>
@@ -220,8 +289,8 @@
       <table id="inputTable" aria-label="Ввод коэффициентов системы">
         <!-- Таблица будет динамически генерироваться -->
       </table>
-      <div>
-        <label for="method">Метод решения:</label>
+      <div style="margin-top: 15px">
+        <label  for="method">Метод решения:</label>
         <select id="method" name="method">
           <option value="gauss">Метод Гаусса</option>
           <option value="gauss_jordan">Метод Жордана–Гаусса</option>
@@ -230,12 +299,28 @@
           <option value="seidel">Метод Зейделя</option>
         </select>
       </div>
-        <div id="iterationCountWrapper" style="margin-top: 1rem; display: none;">
-          <label for="iterations">Число итераций:</label>
-          <input type="number" id="iterations" name="iterations" min="1" value="10" />
+        <div id="precision-error" style="color: red; display: none;"></div>
+        <div id="precisionWrapper" style="display: none; display: flex; justify-content: center;">
+            <div style="display: flex; flex-direction: column; align-items: center; gap: 8px;">
+                <label for="precision" style="margin-bottom:  -10px; font-weight: 600; color: #37474f;">Точность (ε):</label>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <input type="text" id="precision" name="precision" step="any" min="0" value="0.001"
+                      style="width: 80px; margin-top: 16px; padding: 0.4rem; border: 1px solid #b0bec5; border-radius: 8px; font-size: 1rem; background: #f8f9fa; text-align: center;"
+                      oninput="validateInput(this)" />
+                            <button id="decreaseBtn" onclick="decreaseDecimals(event)"
+                                    style="padding: 8px 12px; font-size: 1rem; line-height: 1; border: none; border-radius: 6px; background: linear-gradient(90deg, #42a5f5, #1e88e5); color: white; cursor: pointer; display: flex; align-items: center; justify-content: center;">
+                                –
+                            </button>
+                            <button id="increaseBtn" onclick="increaseDecimals(event)"
+                                    style="padding: 8px 12px; font-size: 1rem; line-height: 1; border: none; border-radius: 6px; background: linear-gradient(90deg, #42a5f5, #1e88e5); color: white; cursor: pointer; display: flex; align-items: center; justify-content: center;">
+                                +
+                            </button>
+                        </div>
+            </div>
         </div>
 
-      <button type="submit">Решить</button>
+
+        <button type="submit" style="margin-top: 25px;">Решить</button>
     </form>
 
     <div id="result" style="display:none;">
@@ -248,6 +333,11 @@
 
       <div class="result" id="solutionBottom"></div>
     </div>
+<div class="export-buttons">
+    <button onclick="exportTxt()">Экспорт в TXT</button>
+  <button onclick="exportCsv()">Export to CSV</button>
+</div>
+
 <div class="history">
       <h2>История решений:</h2>
         <button class="clear-history-btn" onclick="clearHistory()">Очистить историю</button>
@@ -260,19 +350,59 @@
     const sizeSelect = document.getElementById('sizeSelect');
 
     const methodSelect = document.getElementById('method');
-    const iterationCountWrapper = document.getElementById('iterationCountWrapper');
-    const iterationsInput = document.getElementById('iterations');
+    const precisionWrapper = document.getElementById('precisionWrapper');
+    const precisionInput = document.getElementById('precision');
     const historyList = document.getElementById('historyList');
+    let solutionData = null;
 
+function validateInput(input) {
+        // Разрешаем только цифры и одну точку
+        input.value = input.value.replace(/[^0-9.]/g, ''); // Удаляем все символы, кроме цифр и точки
+        input.value = input.value.replace(/(\..*)\./g, '$1'); // Разрешаем только одну точку
+    }
+
+function increaseDecimals(event) {
+    event.preventDefault(); // Предотвращаем отправку формы
+    let value = precisionInput.value;
+    if (value === '0.01') {
+        value = '0.001';
+    } else {
+        const parts = value.split('.');
+        if (parts.length === 2) {
+            parts[1] = '0' + parts[1];
+            value = parts.join('.');
+        }
+    }
+    precisionInput.value = value;
+}
+
+function decreaseDecimals(event) {
+    event.preventDefault(); // Предотвращаем отправку формы
+    let value = precisionInput.value;
+    const parts = value.split('.');
+    if (parts.length === 2 && parts[1].length > 1) {
+        parts[1] = parts[1].substring(1);
+        value = parts.join('.');
+        precisionInput.value = value;
+    }
+}
 
     methodSelect.addEventListener('change', () => {
       const method = methodSelect.value;
-      if (method === 'iteration' || method === 'seidel') {
-        iterationCountWrapper.style.display = 'block';
-      } else {
-        iterationCountWrapper.style.display = 'none';
-      }
+        if (method === 'iteration' || method === 'seidel') {
+            precisionWrapper.style.display = 'block';
+        } else {
+            precisionWrapper.style.display = 'none';
+        }
     });
+window.addEventListener('DOMContentLoaded', () => {
+  const selectedMethod = methodSelect.value;
+  if (selectedMethod === 'iteration' || selectedMethod === 'seidel') {
+    precisionWrapper.style.display = 'block';
+  } else {
+    precisionWrapper.style.display = 'none';
+  }
+});
 
 
     function checkAllFieldsFilled() {
@@ -400,6 +530,8 @@
       document.getElementById('result').style.display = 'none';
     });
 
+
+
     function updateHistory(resultText, formData) {
         const history = JSON.parse(localStorage.getItem('slaeHistory')) || [];
         const methodMap = {
@@ -444,6 +576,30 @@
             historyList.appendChild(div);
         });
     }
+// function updateStepBasedOnInput(input) {
+//     const value = input.value;
+//     if (!value.includes('.')) {
+//         input.step = '1'; // целые числа
+//     } else {
+//         const decimals = value.split('.')[1].length;
+//         input.step = (1 / Math.pow(10, decimals)).toString(); // например, "0.01"
+//     }
+// }
+//
+// // Перечисли все нужные поля
+// const numberInputs = ['precision'];
+//
+// numberInputs.forEach(id => {
+//     const input = document.getElementById(id);
+//     if (!input) return;
+//
+//     input.addEventListener('input', () => updateStepBasedOnInput(input));
+//
+//     // Установить корректный step при загрузке, если уже есть значение
+//     if (input.value) updateStepBasedOnInput(input);
+// });
+
+
 
 function clearHistory() {
       localStorage.removeItem('slaeHistory');
@@ -474,11 +630,47 @@ function clearHistory() {
                 if (bInput) bInput.value = form[bName];
             }
 
-            if (form.iterations !== undefined) {
-                iterationsInput.value = form.iterations;
+            if (form.precision !== undefined) {
+                precisionInput.value = form.precision;
             }
+
         });
     }
+function exportTxt() {
+    if (!solutionData) return;
+    fetch('/generate_txt', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(solutionData)
+    })
+    .then(response => response.blob())
+    .then(blob => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'result.txt';
+        a.click();
+        URL.revokeObjectURL(url);
+    });
+}
+function exportCsv() {
+    if (!solutionData) return;
+    fetch('/export_csv', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(solutionData)
+    })
+    .then(response => response.blob())
+    .then(blob => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'solution.csv';
+        a.click();
+        URL.revokeObjectURL(url);
+    });
+}
+
 
 
     // AJAX отправка формы
@@ -513,20 +705,34 @@ function clearHistory() {
       formData.set('method', document.getElementById('method').value);
 
         if (methodSelect.value === 'iteration' || methodSelect.value === 'seidel') {
-          formData.set('iterations', iterationsInput.value);
+            let precision = precisionInput.value.trim();
+            const precisionErrorDiv = document.getElementById('precision-error');
+
+            if (!precision) {
+                precision = '0.000001';
+                precisionErrorDiv.textContent = 'Поле точности пустое. Будет использовано значение по умолчанию: 0.000001';
+                precisionErrorDiv.style.display = 'block';
+            } else {
+                precisionErrorDiv.textContent = '';
+                precisionErrorDiv.style.display = 'none';
+            }
+
+            formData.set('precision', precision);
         }
 
 
-      const response = await fetch('/solve', {
+        const response = await fetch('/solve', {
         method: 'POST',
         body: formData
       });
+
 
       const data = await response.json();
       const stepsDiv = document.getElementById('steps');
       const resultDiv = document.getElementById('result');
       const solutionTop = document.getElementById('solutionTop');
       const solutionBottom = document.getElementById('solutionBottom');
+      solutionData = data; // Сохраняем данные для экспорта
 
       stepsDiv.innerHTML = '';
       if(data.steps && data.steps.length) {
